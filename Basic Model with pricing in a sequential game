@@ -1,0 +1,130 @@
+# Two pizzerias, both are allowed to change prices and location
+# Location loop: Each pizzeria changes location, searches up to maximize the
+# benefit. x1-step, x1, x1+step.
+# Price loop: In each location determinate the best price to maximize the benefit
+
+import numpy as np
+
+# =====================================================================
+# ETAPA 1: PARÀMETRES BÀSICS DEL MODEL
+# =====================================================================
+posicions = np.linspace(-1, 1, 21)  # Carretera dividida en 21 punts (-1 a 1)
+pas_x = 0.1                         # Pas de moviment d'ubicació (Delta x)
+pas_p = 0.05                        # Pas d'ajust de preu (Delta p)
+
+cost_c0 = 0.2                       # Cost de fabricar la pizza (c0)
+cost_trans = 0.5                    # Cost de transport per distància (k)
+preu_max = 2.0                      # Preu màxim que accepta el client (p_max)
+
+
+# =====================================================================
+# ETAPA 2: CÀLCUL DE BENEFICIS PER A QUALSEVOL POSICIÓ I PREU
+# =====================================================================
+def calcular_beneficis(x1, x2, p1, p2):
+    d1, d2 = 0, 0
+    
+    for xj in posicions:
+        # Cost total per al client = Preu + Transport
+        tc1 = p1 + cost_trans * abs(x1 - xj) if p1 <= preu_max else float('inf')
+        tc2 = p2 + cost_trans * abs(x2 - xj) if p2 <= preu_max else float('inf')
+        
+        # El client tria la pizzeria més barata
+        if tc1 < tc2:
+            d1 += 1
+        elif tc2 < tc1:
+            d2 += 1
+        elif tc1 != float('inf'):  # Empat
+            d1 += 0.5
+            d2 += 0.5
+            
+    # Benefici = (Preu - Cost) * Demanda
+    benefici1 = (p1 - cost_c0) * d1 if p1 >= cost_c0 else 0
+    benefici2 = (p2 - cost_c0) * d2 if p2 >= cost_c0 else 0
+    
+    return benefici1, benefici2
+
+
+# =====================================================================
+# ETAPA 3: BUCLE INTERN (TROBAR ELS PREUS D'EQUILIBRI PER A X1, X2)
+# =====================================================================
+def trobar_preus_equilibri(x1, x2):
+    p1, p2 = 1.0, 1.0  # Preus d'arribada inicials
+    
+    for _ in range(50):
+        p1_vell, p2_vell = p1, p2
+        
+        # --- Pizzeria 1 prova de millorar el seu preu ---
+        millor_b1 = -1
+        for nou_p1 in [max(cost_c0, p1 - pas_p), p1, min(preu_max, p1 + pas_p)]:
+            b1, _ = calcular_beneficis(x1, x2, nou_p1, p2)
+            if b1 > millor_b1:
+                millor_b1 = b1
+                p1 = nou_p1
+
+        # --- Pizzeria 2 prova de millorar el seu preu ---
+        millor_b2 = -1
+        for nou_p2 in [max(cost_c0, p2 - pas_p), p2, min(preu_max, p2 + pas_p)]:
+            _, b2 = calcular_beneficis(x1, x2, p1, nou_p2)
+            if b2 > millor_b2:
+                millor_b2 = b2
+                p2 = nou_p2
+
+        # Si cap de les dues canvia de preu, hem trobat l'equilibri de preus!
+        if round(p1, 2) == round(p1_vell, 2) and round(p2, 2) == round(p2_vell, 2):
+            break
+            
+    b1, b2 = calcular_beneficis(x1, x2, p1, p2)
+    return round(p1, 2), round(p2, 2), b1, b2
+
+
+# =====================================================================
+# ETAPA 4: BUCLE EXTERN (SIMULACIÓ DE MOVIMENT D'UBICACIÓ PER TORNS)
+# =====================================================================
+def simular_joc(x1_inicial, x2_inicial):
+    x1, x2 = x1_inicial, x2_inicial
+    
+    print("=== INICI DE LA SIMULACIÓ ===")
+    print(f"Ubicació Inicial: Pizzeria 1 = {x1} | Pizzeria 2 = {x2}\n")
+    
+    for pas in range(1, 30):
+        x1_vell, x2_vell = x1, x2
+        
+        # --- TORN PIZZERIA 1 (Moure's a la millor ubicació) ---
+        millor_b1 = -1
+        millor_x1 = x1
+        for nou_x1 in [max(-1.0, x1 - pas_x), x1, min(1.0, x1 + pas_x)]:
+            _, _, b1, _ = trobar_preus_equilibri(nou_x1, x2)
+            if b1 > millor_b1:
+                millor_b1 = b1
+                millor_x1 = nou_x1
+        x1 = round(millor_x1, 2)
+        
+        # --- TORN PIZZERIA 2 (Moure's a la millor ubicació) ---
+        millor_b2 = -1
+        millor_x2 = x2
+        for nou_x2 in [max(-1.0, x2 - pas_x), x2, min(1.0, x2 + pas_x)]:
+            _, _, _, b2 = trobar_preus_equilibri(x1, nou_x2)
+            if b2 > millor_b2:
+                millor_b2 = b2
+                millor_x2 = nou_x2
+        x2 = round(millor_x2, 2)
+        
+        # Preus i beneficis actuals
+        p1, p2, b1, b2 = trobar_preus_equilibri(x1, x2)
+        print(f"Pas {pas:2d}: Pizzeria 1 a x={x1:+.1f} (preu={p1:.2f}) | Pizzeria 2 a x={x2:+.1f} (preu={p2:.2f})")
+        
+        # Condició d'aturada: cap empresa es mou
+        if x1 == x1_vell and x2 == x2_vell:
+            print("\n>>> EQUILIBRI FINAL TROBAT (SPE)! <<<")
+            print(f"Ubicació final: x1 = {x1}, x2 = {x2}")
+            print(f"Preus finals:   p1 = {p1}, p2 = {p2}")
+            print(f"Beneficis:      b1 = {b1:.2f}, b2 = {b2:.2f}")
+            break
+
+
+# =====================================================================
+# ETAPA 5: EXECUCIÓ DE LA SIMULACIÓ
+# =====================================================================
+if __name__ == "__main__":
+    simular_joc(x1_inicial=-0.7, x2_inicial=0.5)
+    
